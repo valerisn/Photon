@@ -26,6 +26,7 @@ type PhotonResult = {
     ok: boolean;
     error?: string;
     data?: string;
+    metadata?: any;
 };
 
 type ScreenshotCallback = (err: string | boolean, data: string) => void;
@@ -201,6 +202,7 @@ function requestClientScreenshot(player: string | number, options: any, cb: Scre
     const fileName = requestOptions.fileName || (requestOptions.save ? getGeneratedFileName(player, requestOptions.encoding || config.defaultEncoding) : null);
     delete requestOptions['fileName']; // so the client won't get to know this
     delete requestOptions['save'];
+    delete requestOptions['metadata'];
 
     const timeout = setTimeout(() => {
         if (uploads[tkn] === undefined) {
@@ -225,17 +227,19 @@ function requestClientScreenshot(player: string | number, options: any, cb: Scre
     emitNet('photon:requestScreenshot', player, requestOptions, `/${GetCurrentResourceName()}/upload/${tkn}`);
 }
 
-function toResult(err: string | boolean, data: string): PhotonResult {
+function toResult(err: string | boolean, data: string, metadata?: any): PhotonResult {
     if (err) {
         return {
             ok: false,
-            error: String(err)
+            error: String(err),
+            metadata
         };
     }
 
     return {
         ok: true,
-        data
+        data,
+        metadata
     };
 }
 
@@ -247,7 +251,9 @@ exp('requestClientScreenshot', (player: string | number, options: any, cb: Scree
 });
 
 exp('requestClientScreenshotResult', (player: string | number, options: any, cb: (result: PhotonResult) => void) => {
+    const metadata = options?.metadata;
+
     requestClientScreenshot(player, options, (err, data) => {
-        cb(toResult(err, data));
+        cb(toResult(err, data, metadata));
     });
 });
