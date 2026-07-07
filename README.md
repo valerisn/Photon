@@ -8,24 +8,50 @@ This fork was only adjusted to meet my needs for a few scripts I plan to make be
 
 ## What It Does
 
-Photon lets scripts request screenshots from a FiveM client. It can return the screenshot as a base64 data URI, upload it directly to a remote HTTP endpoint, or let the server request a screenshot from a player and receive the image back.
+Photon lets scripts request screenshots from a FiveM client. It can return a base64 data URI, upload directly to an HTTP endpoint, save a server-requested screenshot to disk, or send a player screenshot to Discord.
 
-The resource is intended to be used through exports. It does not add standalone commands.
+Photon is used through exports. It does not add standalone commands.
 
 ## Installation
 
-Place Photon in your resources folder and ensure it from your `server.cfg`:
+Place Photon in your resources folder and ensure it from `server.cfg`:
 
 ```cfg
 ensure Photon
 ```
 
-If you are building from source, install dependencies and build the resource:
+If building from source:
 
 ```bash
 npm install
 npm run build
 ```
+
+## Configuration
+
+Photon reads `photon.config.json` from the resource root.
+
+```json
+{
+    "defaultEncoding": "jpg",
+    "defaultQuality": 0.92,
+    "uploadTimeoutMs": 60000,
+    "maxConcurrentRequestsPerPlayer": 1,
+    "saveDirectory": "cache/photon",
+    "allowedWebhookHosts": ["discord.com", "discordapp.com"],
+    "debug": false
+}
+```
+
+| Option | Description |
+| --- | --- |
+| `defaultEncoding` | Default image format for server-requested screenshots. |
+| `defaultQuality` | Default lossy encoder quality from `0.0` to `1.0`. |
+| `uploadTimeoutMs` | How long server-requested screenshots can wait before failing. |
+| `maxConcurrentRequestsPerPlayer` | Per-player active screenshot request limit. |
+| `saveDirectory` | Folder used when `save = true` generates a filename. |
+| `allowedWebhookHosts` | Host allowlist for Discord webhook uploads. |
+| `debug` | Enables Photon server debug logging. |
 
 ## Client Exports
 
@@ -39,8 +65,6 @@ exports['Photon']:requestScreenshot(function(data)
 end)
 ```
 
-With options:
-
 ```lua
 exports['Photon']:requestScreenshot({
     encoding = 'jpg',
@@ -50,32 +74,16 @@ exports['Photon']:requestScreenshot({
 end)
 ```
 
-Options:
-
-| Option | Type | Description |
-| --- | --- | --- |
-| `encoding` | `'jpg'`, `'png'`, or `'webp'` | Image format. Defaults to `jpg`. |
-| `quality` | `number` | Lossy image quality from `0.0` to `1.0`. Defaults to `0.92`. |
-
-Callback:
-
-| Value | Description |
+| Option | Description |
 | --- | --- |
-| `data` | Base64 data URI for the screenshot. |
+| `encoding` | `jpg`, `png`, or `webp`. Defaults to `jpg`. |
+| `quality` | Lossy encoder quality from `0.0` to `1.0`. Defaults to `0.92`. |
 
 Do not send large data URI screenshots through server events unless you know exactly what you are doing.
 
 ### requestScreenshotUpload
 
 Captures a screenshot on the local client and uploads it to an HTTP endpoint as `multipart/form-data`.
-
-```lua
-exports['Photon']:requestScreenshotUpload('https://example.com/upload', 'file', function(response)
-    print(response)
-end)
-```
-
-With options:
 
 ```lua
 exports['Photon']:requestScreenshotUpload('https://example.com/upload', 'file', {
@@ -89,28 +97,24 @@ exports['Photon']:requestScreenshotUpload('https://example.com/upload', 'file', 
 end)
 ```
 
-Arguments:
+| Argument | Description |
+| --- | --- |
+| `url` | Remote upload URL. |
+| `field` | Multipart form field name for the uploaded file. |
+| `options` | Optional screenshot/upload options. |
+| `cb` | Callback receiving the remote response body. |
 
-| Argument | Type | Description |
-| --- | --- | --- |
-| `url` | `string` | Remote upload URL. |
-| `field` | `string` | Multipart form field name for the uploaded file. |
-| `options` | `table` | Optional screenshot/upload options. |
-| `cb` | `function` | Callback receiving the remote response body. |
+| Option | Description |
+| --- | --- |
+| `encoding` | `jpg`, `png`, or `webp`. Defaults to `jpg`. |
+| `quality` | Lossy encoder quality from `0.0` to `1.0`. Defaults to `0.92`. |
+| `headers` | Optional HTTP headers for the upload request. |
 
-Options:
-
-| Option | Type | Description |
-| --- | --- | --- |
-| `encoding` | `'jpg'`, `'png'`, or `'webp'` | Image format. Defaults to `jpg`. |
-| `quality` | `number` | Lossy image quality from `0.0` to `1.0`. Defaults to `0.92`. |
-| `headers` | `table` | Optional HTTP headers for the upload request. |
-
-## Server Export
+## Server Exports
 
 ### requestClientScreenshot
 
-Requests a screenshot from a specific player. The player uploads the result back to Photon's built-in server HTTP handler.
+Requests a screenshot from a specific player. This keeps the original `err, data` callback style.
 
 ```lua
 exports['Photon']:requestClientScreenshot(source, {
@@ -126,48 +130,109 @@ exports['Photon']:requestClientScreenshot(source, {
 end)
 ```
 
-To save the screenshot to a local file on the server:
+To save to a specific server path:
 
 ```lua
 exports['Photon']:requestClientScreenshot(source, {
-    fileName = 'cache/screenshot.jpg',
-    encoding = 'jpg',
-    quality = 0.92
+    fileName = 'cache/screenshots/player.jpg'
 }, function(err, fileName)
-    if err then
-        print('Screenshot failed:', err)
-        return
-    end
-
-    print('Saved screenshot:', fileName)
+    print(err, fileName)
 end)
 ```
 
-Arguments:
+To auto-generate a file path in `saveDirectory`:
 
-| Argument | Type | Description |
-| --- | --- | --- |
-| `player` | `string` or `number` | Target player server ID. |
-| `options` | `table` | Screenshot options. |
-| `cb` | `function` | Callback receiving `err` and `data`. |
+```lua
+exports['Photon']:requestClientScreenshot(source, {
+    save = true,
+    encoding = 'jpg'
+}, function(err, fileName)
+    print(err, fileName)
+end)
+```
 
-Options:
+Photon creates missing save directories automatically.
 
-| Option | Type | Description |
-| --- | --- | --- |
-| `fileName` | `string` | Optional server-side file path. If omitted, callback receives a data URI. |
-| `encoding` | `'jpg'`, `'png'`, or `'webp'` | Image format. Defaults to `jpg`. |
-| `quality` | `number` | Lossy image quality from `0.0` to `1.0`. Defaults to `0.92`. |
+### requestClientScreenshotResult
 
-Callback:
+Requests a screenshot and returns a single result table.
 
-| Value | Description |
+```lua
+exports['Photon']:requestClientScreenshotResult(source, {
+    encoding = 'jpg',
+    metadata = {
+        reason = 'staff-check',
+        staff = GetPlayerName(source)
+    }
+}, function(result)
+    if not result.ok then
+        print('Screenshot failed:', result.error)
+        return
+    end
+
+    print(result.data)
+    print(json.encode(result.metadata))
+end)
+```
+
+Result table:
+
+| Field | Description |
 | --- | --- |
-| `err` | `false` on success, or an error string. |
-| `data` | Saved file path when `fileName` is used, otherwise a base64 data URI. |
+| `ok` | `true` on success, `false` on failure. |
+| `error` | Error string when `ok` is `false`. |
+| `data` | Data URI or saved file path when successful. |
+| `metadata` | Caller-provided metadata copied back into the result. |
+
+### requestClientScreenshotToDiscord
+
+Requests a screenshot from a player and uploads it to a Discord webhook as an attached file.
+
+```lua
+exports['Photon']:requestClientScreenshotToDiscord(source, 'https://discord.com/api/webhooks/...', {
+    content = 'Player screenshot',
+    embedTitle = 'Photon Screenshot',
+    embedDescription = 'Requested by staff',
+    encoding = 'jpg',
+    quality = 0.92,
+    metadata = {
+        reason = 'staff-check'
+    }
+}, function(result)
+    if not result.ok then
+        print('Discord upload failed:', result.error)
+        return
+    end
+
+    print('Discord response:', result.data)
+end)
+```
+
+| Option | Description |
+| --- | --- |
+| `content` | Message content sent with the webhook. |
+| `username` | Optional webhook username override. |
+| `avatarUrl` | Optional webhook avatar URL override. |
+| `embedTitle` | Optional embed title. |
+| `embedDescription` | Optional embed description. |
+| `encoding` | `jpg`, `png`, or `webp`. Defaults to config. |
+| `quality` | Lossy encoder quality from `0.0` to `1.0`. Defaults to config. |
+| `metadata` | Data returned back in the result callback. |
+
+Webhook uploads are restricted by `allowedWebhookHosts` in `photon.config.json`.
+
+## Server Options
+
+| Option | Description |
+| --- | --- |
+| `fileName` | Save to this server-side path instead of returning a data URI. |
+| `save` | When `true`, save using an auto-generated path in `saveDirectory`. |
+| `encoding` | `jpg`, `png`, or `webp`. Defaults to config. |
+| `quality` | Lossy encoder quality from `0.0` to `1.0`. Defaults to config. |
+| `metadata` | Server-side metadata copied into result-style callbacks. |
 
 ## Notes
 
 Photon keeps the same general idea as `screenshot-basic`: use NUI/WebGL to read the game render target, encode it in the browser context, then send it where the caller requested.
 
-Server-requested screenshots use a temporary upload token and time out if the client never uploads the image.
+Server-requested screenshots use temporary upload tokens, time out when clients do not upload, and are limited per player by config.
