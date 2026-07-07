@@ -1,0 +1,20 @@
+{
+    "compilerOptions": {
+        "outDir": "./",
+        "rootDir": "./src",
+        "noImplicitAny": false,
+        "strict": false,
+        "module": "es6",
+        "moduleResolution": "bundler",
+        "target": "es6",
+        "allowJs": true,
+        "lib": [
+            "es2016",
+            "dom"
+        ]
+    },
+    "include": [
+        "./**/*"
+    ],
+    "exclude": []
+}
