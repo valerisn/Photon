@@ -17,6 +17,7 @@ webpack_config 'server.config.js'
 webpack_config 'ui.config.js'
 
 files {
+    'photon.config.json',
     'dist/ui.html'
 }
 

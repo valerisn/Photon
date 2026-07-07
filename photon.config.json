@@ -1,0 +1,12 @@
+{
+    "defaultEncoding": "jpg",
+    "defaultQuality": 0.92,
+    "uploadTimeoutMs": 60000,
+    "maxConcurrentRequestsPerPlayer": 1,
+    "saveDirectory": "cache/photon",
+    "allowedWebhookHosts": [
+        "discord.com",
+        "discordapp.com"
+    ],
+    "debug": false
+}

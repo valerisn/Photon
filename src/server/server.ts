@@ -11,6 +11,52 @@ import { File } from 'formidable';
 const app = new Koa();
 const router = new Router();
 
+type PhotonConfig = {
+    defaultEncoding: 'jpg' | 'png' | 'webp';
+    defaultQuality: number;
+    uploadTimeoutMs: number;
+    maxConcurrentRequestsPerPlayer: number;
+    saveDirectory: string;
+    allowedWebhookHosts: string[];
+    debug: boolean;
+};
+
+const defaultConfig: PhotonConfig = {
+    defaultEncoding: 'jpg',
+    defaultQuality: 0.92,
+    uploadTimeoutMs: 60000,
+    maxConcurrentRequestsPerPlayer: 1,
+    saveDirectory: 'cache/photon',
+    allowedWebhookHosts: ['discord.com', 'discordapp.com'],
+    debug: false
+};
+
+function loadConfig(): PhotonConfig {
+    const rawConfig = LoadResourceFile(GetCurrentResourceName(), 'photon.config.json');
+
+    if (!rawConfig) {
+        return defaultConfig;
+    }
+
+    try {
+        return {
+            ...defaultConfig,
+            ...JSON.parse(rawConfig)
+        };
+    } catch (err) {
+        console.warn(`[Photon] Failed to parse photon.config.json: ${err.message}`);
+        return defaultConfig;
+    }
+}
+
+const config = loadConfig();
+
+function debugLog(message: string) {
+    if (config.debug) {
+        console.log(`[Photon] ${message}`);
+    }
+}
+
 class UploadData {
     fileName!: string;
 
@@ -19,7 +65,6 @@ class UploadData {
     timeout!: NodeJS.Timeout;
 }
 
-const uploadTimeout = 60000;
 const uploads: { [token: string]: UploadData } = {};
 
 router.post('/upload/:token', async (ctx) => {
@@ -106,7 +151,10 @@ exp('requestClientScreenshot', (player: string | number, options: any, cb: (err:
         const upload = uploads[tkn];
         delete uploads[tkn];
         upload.cb('request timed out', null);
-    }, uploadTimeout);
+    }, config.uploadTimeoutMs);
+
+    requestOptions.encoding = requestOptions.encoding || config.defaultEncoding;
+    requestOptions.quality = requestOptions.quality || config.defaultQuality;
 
     uploads[tkn] = {
         fileName,
@@ -114,5 +162,6 @@ exp('requestClientScreenshot', (player: string | number, options: any, cb: (err:
         timeout
     };
 
+    debugLog(`requesting screenshot from player ${player}`);
     emitNet('photon:requestScreenshot', player, requestOptions, `/${GetCurrentResourceName()}/upload/${tkn}`);
 });
