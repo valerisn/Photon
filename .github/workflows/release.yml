@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package Resource
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+
+      - name: Stage package
+        run: |
+          mkdir -p package/Photon
+          cp fxmanifest.lua package/Photon/
+          cp photon.config.json package/Photon/
+          cp README.md package/Photon/
+          cp LICENSE package/Photon/
+          cp -R dist package/Photon/dist
+
+      - name: Create archive
+        run: |
+          cd package
+          zip -r Photon.zip Photon
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: package/Photon.zip
