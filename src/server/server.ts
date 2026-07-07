@@ -30,6 +30,7 @@ type PhotonResult = {
 };
 
 type ScreenshotCallback = (err: string | boolean, data: string) => void;
+type ResultCallback = (result: PhotonResult) => void;
 
 const defaultConfig: PhotonConfig = {
     defaultEncoding: 'jpg',
@@ -76,6 +77,72 @@ function getGeneratedFileName(player: string | number, encoding: string) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
     return path.join(config.saveDirectory, `${safePlayer}_${timestamp}.${getFileExtension(encoding)}`);
+}
+
+function isAllowedWebhookHost(webhookUrl: string) {
+    try {
+        const host = new URL(webhookUrl).hostname.toLowerCase();
+
+        return config.allowedWebhookHosts.some((allowedHost) => {
+            const normalizedHost = allowedHost.toLowerCase();
+
+            return host === normalizedHost || host.endsWith(`.${normalizedHost}`);
+        });
+    } catch (err) {
+        return false;
+    }
+}
+
+function dataUriToBuffer(dataUri: string) {
+    const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
+
+    if (!match) {
+        throw new Error('invalid screenshot data URI');
+    }
+
+    return {
+        mimeType: match[1],
+        data: Buffer.from(match[2], 'base64')
+    };
+}
+
+async function sendDiscordWebhook(webhookUrl: string, options: any, screenshotData: string) {
+    const image = dataUriToBuffer(screenshotData);
+    const encoding = getFileExtension(options.encoding || config.defaultEncoding);
+    const form = new FormData();
+    const payload: any = {
+        content: options.content || '',
+        username: options.username,
+        avatar_url: options.avatarUrl
+    };
+
+    if (options.embedTitle || options.embedDescription) {
+        payload.embeds = [{
+            title: options.embedTitle,
+            description: options.embedDescription,
+            image: {
+                url: `attachment://screenshot.${encoding}`
+            },
+            timestamp: new Date().toISOString()
+        }];
+    }
+
+    form.append('payload_json', JSON.stringify(payload));
+    form.append('files[0]', new Blob([image.data], { type: image.mimeType }), `screenshot.${encoding}`);
+
+    const separator = webhookUrl.includes('?') ? '&' : '?';
+    const response = await fetch(`${webhookUrl}${separator}wait=true`, {
+        method: 'POST',
+        body: form as any
+    });
+
+    const text = await response.text();
+
+    if (!response.ok) {
+        throw new Error(text || `Discord webhook failed with HTTP ${response.status}`);
+    }
+
+    return text;
 }
 
 class UploadData {
@@ -255,5 +322,36 @@ exp('requestClientScreenshotResult', (player: string | number, options: any, cb:
 
     requestClientScreenshot(player, options, (err, data) => {
         cb(toResult(err, data, metadata));
+    });
+});
+
+exp('requestClientScreenshotToDiscord', (player: string | number, webhookUrl: string, options: any, cb: ResultCallback) => {
+    const metadata = options?.metadata;
+
+    if (!isAllowedWebhookHost(webhookUrl)) {
+        setImmediate(() => {
+            cb(toResult('webhook host is not allowed', null, metadata));
+        });
+
+        return;
+    }
+
+    const screenshotOptions = { ...(options || {}) };
+    delete screenshotOptions.fileName;
+    delete screenshotOptions.save;
+
+    requestClientScreenshot(player, screenshotOptions, (err, data) => {
+        if (err) {
+            cb(toResult(err, data, metadata));
+            return;
+        }
+
+        sendDiscordWebhook(webhookUrl, screenshotOptions, data)
+            .then((response) => {
+                cb(toResult(false, response, metadata));
+            })
+            .catch((err) => {
+                cb(toResult(err.message || 'Discord webhook upload failed', null, metadata));
+            });
     });
 });
