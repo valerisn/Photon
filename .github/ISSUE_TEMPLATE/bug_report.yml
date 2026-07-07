@@ -1,0 +1,47 @@
+name: Bug Report
+description: Report a Photon bug
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Do not report security issues here. Use SECURITY.md instead.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: List the exact steps or code needed to reproduce the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Errors
+      render: text
+  - type: input
+    id: server-version
+    attributes:
+      label: FiveM Server Version
+  - type: input
+    id: photon-version
+    attributes:
+      label: Photon Version or Commit
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant Config
+      render: json
