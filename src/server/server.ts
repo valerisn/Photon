@@ -74,6 +74,23 @@ class UploadData {
 }
 
 const uploads: { [token: string]: UploadData } = {};
+const activeRequestsByPlayer: { [player: string]: number } = {};
+
+function incrementPlayerRequests(player: string) {
+    activeRequestsByPlayer[player] = (activeRequestsByPlayer[player] || 0) + 1;
+}
+
+function decrementPlayerRequests(player: string) {
+    if (!activeRequestsByPlayer[player]) {
+        return;
+    }
+
+    activeRequestsByPlayer[player]--;
+
+    if (activeRequestsByPlayer[player] <= 0) {
+        delete activeRequestsByPlayer[player];
+    }
+}
 
 router.post('/upload/:token', async (ctx) => {
     const tkn: string = ctx.params['token'];
@@ -142,8 +159,25 @@ app.use(koaBody({
 setHttpCallback(app.callback());
 
 function requestClientScreenshot(player: string | number, options: any, cb: ScreenshotCallback) {
+    const playerKey = player.toString();
+
+    if ((activeRequestsByPlayer[playerKey] || 0) >= config.maxConcurrentRequestsPerPlayer) {
+        setImmediate(() => {
+            cb('too many active screenshot requests for player', null);
+        });
+
+        return;
+    }
+
     const tkn = randomUUID();
     const requestOptions = { ...(options || {}) };
+
+    incrementPlayerRequests(playerKey);
+
+    const wrappedCb: ScreenshotCallback = (err, data) => {
+        decrementPlayerRequests(playerKey);
+        cb(err, data);
+    };
 
     const fileName = requestOptions.fileName;
     delete requestOptions['fileName']; // so the client won't get to know this
@@ -163,7 +197,7 @@ function requestClientScreenshot(player: string | number, options: any, cb: Scre
 
     uploads[tkn] = {
         fileName,
-        cb,
+        cb: wrappedCb,
         timeout
     };
 
