@@ -2,6 +2,7 @@ import { setHttpCallback } from '@citizenfx/http-wrapper';
 
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
+import * as path from 'path';
 import Koa from 'koa';
 import Router from '@koa/router';
 import { koaBody } from 'koa-body';
@@ -65,6 +66,17 @@ function debugLog(message: string) {
     }
 }
 
+function getFileExtension(encoding: string) {
+    return encoding === 'png' || encoding === 'webp' ? encoding : 'jpg';
+}
+
+function getGeneratedFileName(player: string | number, encoding: string) {
+    const safePlayer = player.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    return path.join(config.saveDirectory, `${safePlayer}_${timestamp}.${getFileExtension(encoding)}`);
+}
+
 class UploadData {
     fileName!: string;
 
@@ -120,13 +132,20 @@ router.post('/upload/:token', async (ctx) => {
         }
 
         if (upload.fileName) {
-            mv(f.filepath, upload.fileName, (err) => {
+            fs.mkdir(path.dirname(upload.fileName), { recursive: true }, (err) => {
                 if (err) {
                     finish(err.message, null);
                     return;
                 }
 
-                finish(null, upload.fileName);
+                mv(f.filepath, upload.fileName, (err) => {
+                    if (err) {
+                        finish(err.message, null);
+                        return;
+                    }
+
+                    finish(null, upload.fileName);
+                });
             });
         } else {
             fs.readFile(f.filepath, (err, data) => {
@@ -179,8 +198,9 @@ function requestClientScreenshot(player: string | number, options: any, cb: Scre
         cb(err, data);
     };
 
-    const fileName = requestOptions.fileName;
+    const fileName = requestOptions.fileName || (requestOptions.save ? getGeneratedFileName(player, requestOptions.encoding || config.defaultEncoding) : null);
     delete requestOptions['fileName']; // so the client won't get to know this
+    delete requestOptions['save'];
 
     const timeout = setTimeout(() => {
         if (uploads[tkn] === undefined) {
