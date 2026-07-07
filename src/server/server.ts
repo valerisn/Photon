@@ -21,6 +21,14 @@ type PhotonConfig = {
     debug: boolean;
 };
 
+type PhotonResult = {
+    ok: boolean;
+    error?: string;
+    data?: string;
+};
+
+type ScreenshotCallback = (err: string | boolean, data: string) => void;
+
 const defaultConfig: PhotonConfig = {
     defaultEncoding: 'jpg',
     defaultQuality: 0.92,
@@ -60,7 +68,7 @@ function debugLog(message: string) {
 class UploadData {
     fileName!: string;
 
-    cb!: (err: string | boolean, data: string) => void;
+    cb!: ScreenshotCallback;
 
     timeout!: NodeJS.Timeout;
 }
@@ -133,10 +141,7 @@ app.use(koaBody({
 
 setHttpCallback(app.callback());
 
-// Cfx stuff
-const exp = (<any>global).exports;
-
-exp('requestClientScreenshot', (player: string | number, options: any, cb: (err: string | boolean, data: string) => void) => {
+function requestClientScreenshot(player: string | number, options: any, cb: ScreenshotCallback) {
     const tkn = randomUUID();
     const requestOptions = { ...(options || {}) };
 
@@ -164,4 +169,31 @@ exp('requestClientScreenshot', (player: string | number, options: any, cb: (err:
 
     debugLog(`requesting screenshot from player ${player}`);
     emitNet('photon:requestScreenshot', player, requestOptions, `/${GetCurrentResourceName()}/upload/${tkn}`);
+}
+
+function toResult(err: string | boolean, data: string): PhotonResult {
+    if (err) {
+        return {
+            ok: false,
+            error: String(err)
+        };
+    }
+
+    return {
+        ok: true,
+        data
+    };
+}
+
+// Cfx stuff
+const exp = (<any>global).exports;
+
+exp('requestClientScreenshot', (player: string | number, options: any, cb: ScreenshotCallback) => {
+    requestClientScreenshot(player, options, cb);
+});
+
+exp('requestClientScreenshotResult', (player: string | number, options: any, cb: (result: PhotonResult) => void) => {
+    requestClientScreenshot(player, options, (err, data) => {
+        cb(toResult(err, data));
+    });
 });
