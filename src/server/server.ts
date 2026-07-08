@@ -19,6 +19,7 @@ type PhotonConfig = {
     maxConcurrentRequestsPerPlayer: number;
     saveDirectory: string;
     allowedWebhookHosts: string[];
+    historySize: number;
     debug: boolean;
 };
 
@@ -39,6 +40,7 @@ const defaultConfig: PhotonConfig = {
     maxConcurrentRequestsPerPlayer: 1,
     saveDirectory: 'cache/photon',
     allowedWebhookHosts: ['discord.com', 'discordapp.com'],
+    historySize: 20,
     debug: false
 };
 
@@ -153,8 +155,35 @@ class UploadData {
     timeout!: NodeJS.Timeout;
 }
 
+type HistoryRecord = {
+    timestamp: string;
+    player: string;
+    err: string | boolean;
+    data: string;
+};
+
 const uploads: { [token: string]: UploadData } = {};
 const activeRequestsByPlayer: { [player: string]: number } = {};
+const screenshotHistory: { [player: string]: HistoryRecord[] } = {};
+
+function storeHistory(player: string, err: string | boolean, data: string) {
+    const record: HistoryRecord = {
+        timestamp: new Date().toISOString(),
+        player,
+        err,
+        data
+    };
+
+    if (!screenshotHistory[player]) {
+        screenshotHistory[player] = [];
+    }
+
+    screenshotHistory[player].push(record);
+
+    if (screenshotHistory[player].length > config.historySize) {
+        screenshotHistory[player] = screenshotHistory[player].slice(-config.historySize);
+    }
+}
 
 function incrementPlayerRequests(player: string) {
     activeRequestsByPlayer[player] = (activeRequestsByPlayer[player] || 0) + 1;
@@ -263,6 +292,7 @@ function requestClientScreenshot(player: string | number, options: any, cb: Scre
 
     const wrappedCb: ScreenshotCallback = (err, data) => {
         decrementPlayerRequests(playerKey);
+        storeHistory(playerKey, err, data);
         cb(err, data);
     };
 
@@ -381,4 +411,19 @@ exp('requestPlayerScreenshots', (players: (string | number)[], options: any, cb:
             }
         });
     }
+});
+
+function getPlayerHistory(player: string) {
+    return screenshotHistory[player] || [];
+}
+
+exp('getScreenshotHistory', (player: string | number, cb: (history: HistoryRecord[]) => void) => {
+    setImmediate(() => {
+        cb(getPlayerHistory(player.toString()));
+    });
+});
+
+exp('clearScreenshotHistory', (player: string | number) => {
+    const key = player.toString();
+    delete screenshotHistory[key];
 });
