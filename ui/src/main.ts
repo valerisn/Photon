@@ -27,6 +27,14 @@ class ScreenshotRequest {
 
     width: number;
     height: number;
+
+    overlay: {
+        text: string;
+        fontSize: number;
+        color: string;
+        position: string;
+        background: string;
+    };
 }
 
 function postResult(request: ScreenshotRequest, data: string) {
@@ -167,6 +175,57 @@ class ScreenshotUI {
         }
     }
 
+    drawOverlay(ctx: CanvasRenderingContext2D, overlay: any, width: number, height: number) {
+        const pos = overlay.position || 'bottom-left';
+        const fontSize = overlay.fontSize || 24;
+        ctx.font = `${fontSize}px sans-serif`;
+        ctx.textBaseline = 'alphabetic';
+
+        const lines = overlay.text.split('\n');
+        const lineHeight = fontSize * 1.4;
+        const padding = 16;
+        let boxHeight = lines.length * lineHeight + padding * 2;
+        let boxWidth = 0;
+        for (const line of lines) {
+            const m = ctx.measureText(line);
+            boxWidth = Math.max(boxWidth, m.width + padding * 2);
+        }
+
+        let x: number, y: number;
+        switch (pos) {
+            case 'top-left':
+                x = 0;
+                y = 0;
+                break;
+            case 'top-right':
+                x = width - boxWidth;
+                y = 0;
+                break;
+            case 'bottom-left':
+                x = 0;
+                y = height - boxHeight;
+                break;
+            case 'bottom-right':
+                x = width - boxWidth;
+                y = height - boxHeight;
+                break;
+            default:
+                x = Math.round((width - boxWidth) / 2);
+                y = Math.round((height - boxHeight) / 2);
+        }
+
+        if (overlay.background) {
+            ctx.fillStyle = overlay.background;
+            ctx.fillRect(x, y, boxWidth, boxHeight);
+        }
+
+        ctx.fillStyle = overlay.color || '#ffffff';
+        ctx.textBaseline = 'top';
+        for (let i = 0; i < lines.length; i++) {
+            ctx.fillText(lines[i], x + padding, y + padding + i * lineHeight);
+        }
+    }
+
     handleRequest(request: ScreenshotRequest) {
         const w = window.innerWidth;
         const h = window.innerHeight;
@@ -196,6 +255,10 @@ class ScreenshotUI {
 
         const cxt = canvas.getContext('2d');
         cxt.drawImage(tempCanvas, 0, 0, w, h, 0, 0, outW, outH);
+
+        if (request.overlay) {
+            this.drawOverlay(cxt, request.overlay, outW, outH);
+        }
 
         // encode the image
         let type = 'image/png';
