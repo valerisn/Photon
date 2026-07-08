@@ -355,3 +355,30 @@ exp('requestClientScreenshotToDiscord', (player: string | number, webhookUrl: st
             });
     });
 });
+
+exp('requestPlayerScreenshots', (players: (string | number)[], options: any, cb: (results: { [id: string]: PhotonResult }) => void) => {
+    if (!players || players.length === 0) {
+        setImmediate(() => {
+            cb({});
+        });
+
+        return;
+    }
+
+    const metadata = options?.metadata;
+    const results: { [id: string]: PhotonResult } = {};
+    let completed = 0;
+    const total = players.length;
+
+    for (const player of players) {
+        requestClientScreenshot(player, options, (err, data) => {
+            const id = player.toString();
+            results[id] = toResult(err, data, metadata);
+            completed++;
+
+            if (completed >= total) {
+                cb(results);
+            }
+        });
+    }
+});
