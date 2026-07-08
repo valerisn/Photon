@@ -20,6 +20,9 @@ type PhotonConfig = {
     saveDirectory: string;
     allowedWebhookHosts: string[];
     historySize: number;
+    commandsEnabled: boolean;
+    commandsPermissionRequired: boolean;
+    commandDiscordWebhook: string;
     debug: boolean;
 };
 
@@ -28,6 +31,8 @@ type PhotonResult = {
     error?: string;
     data?: string;
     metadata?: any;
+    discordResult?: string;
+    discordError?: string;
 };
 
 type ScreenshotCallback = (err: string | boolean, data: string) => void;
@@ -41,6 +46,9 @@ const defaultConfig: PhotonConfig = {
     saveDirectory: 'cache/photon',
     allowedWebhookHosts: ['discord.com', 'discordapp.com'],
     historySize: 20,
+    commandsEnabled: true,
+    commandsPermissionRequired: true,
+    commandDiscordWebhook: '',
     debug: false
 };
 
@@ -426,4 +434,70 @@ exp('getScreenshotHistory', (player: string | number, cb: (history: HistoryRecor
 exp('clearScreenshotHistory', (player: string | number) => {
     const key = player.toString();
     delete screenshotHistory[key];
+});
+
+// Command system
+if (config.commandsEnabled) {
+    RegisterCommand('screenshot', (source: number, args: string[], raw: string) => {
+        if (source === 0) {
+            return;
+        }
+
+        const player = source.toString();
+
+        if (config.commandsPermissionRequired && !IsPlayerAceAllowed(player, 'command.screenshot')) {
+            CancelEvent();
+            emitNet('chat:addMessage', source, { args: ['[Photon]', 'You do not have permission to use this command.'] });
+
+            return;
+        }
+
+        emitNet('photon:openCommandUI', source);
+    }, false);
+}
+
+onNet('photon:commandScreenshot', (options: any) => {
+    const source = global['source'];
+    const targetStr = options?.target;
+
+    if (!targetStr) {
+        return;
+    }
+
+    const target = parseInt(targetStr, 10);
+
+    if (isNaN(target) || target === source) {
+        return;
+    }
+
+    const screenshotOptions: any = {
+        encoding: options.encoding || config.defaultEncoding,
+        quality: options.quality || config.defaultQuality
+    };
+
+    if (options.width) { screenshotOptions.width = options.width; }
+    if (options.height) { screenshotOptions.height = options.height; }
+    if (options.overlay) { screenshotOptions.overlay = options.overlay; }
+
+    requestClientScreenshot(target, screenshotOptions, (err, data) => {
+        const result: PhotonResult = {
+            ok: !err,
+            data: data || undefined,
+            error: err ? String(err) : undefined
+        };
+
+        if (!err && options.sendToDiscord && config.commandDiscordWebhook) {
+            sendDiscordWebhook(config.commandDiscordWebhook, screenshotOptions, data)
+                .then((response) => {
+                    result.discordResult = response;
+                    emitNet('photon:commandScreenshotResult', source, result);
+                })
+                .catch((discordErr) => {
+                    result.discordError = discordErr.message || 'discord send failed';
+                    emitNet('photon:commandScreenshotResult', source, result);
+                });
+        } else {
+            emitNet('photon:commandScreenshotResult', source, result);
+        }
+    });
 });

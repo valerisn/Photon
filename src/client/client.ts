@@ -81,6 +81,77 @@ exp('requestScreenshotUpload', (url: string, field: string, options: any, cb: (r
     }));
 });
 
+RegisterNuiCallbackType('screenshot_command');
+RegisterNuiCallbackType('screenshot_command_close');
+
+function takeSelfScreenshot(options: any): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject('screenshot timed out');
+        }, 30000);
+
+        exp('requestScreenshot', options, (data: string) => {
+            clearTimeout(timeout);
+            resolve(data);
+        });
+    });
+}
+
+on('__cfx_nui:screenshot_command', (body: any, cb: (arg: any) => void) => {
+    cb(true);
+
+    const handler = async () => {
+        const options: any = {
+            encoding: body.encoding || 'jpg',
+            quality: body.quality || 0.92
+        };
+
+        if (body.width) { options.width = body.width; }
+        if (body.height) { options.height = body.height; }
+        if (body.overlay) { options.overlay = body.overlay; }
+
+        if (!body.player) {
+            try {
+                const data = await takeSelfScreenshot(options);
+                SendNuiMessage(JSON.stringify({
+                    type: 'screenshotCommandResult',
+                    result: { ok: true, data }
+                }));
+            } catch (err) {
+                SendNuiMessage(JSON.stringify({
+                    type: 'screenshotCommandResult',
+                    result: { ok: false, error: String(err) }
+                }));
+            }
+        } else {
+            options.target = body.player;
+            options.sendToDiscord = body.sendToDiscord === true;
+            emitNet('photon:commandScreenshot', options);
+        }
+    };
+
+    handler();
+});
+
+on('__cfx_nui:screenshot_command_close', (body: any, cb: (arg: any) => void) => {
+    cb(true);
+    SetNuiFocus(false, false);
+});
+
+onNet('photon:openCommandUI', () => {
+    SetNuiFocus(true, true);
+    SendNuiMessage(JSON.stringify({
+        type: 'showScreenshotUI'
+    }));
+});
+
+onNet('photon:commandScreenshotResult', (result: any) => {
+    SendNuiMessage(JSON.stringify({
+        type: 'screenshotCommandResult',
+        result
+    }));
+});
+
 onNet('photon:requestScreenshot', (options: any, url: string) => {
     const requestOptions = { ...(options || {}) };
     requestOptions.encoding = requestOptions.encoding || 'jpg';

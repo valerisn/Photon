@@ -13,6 +13,8 @@ import {
     WebGLRenderer
 } from '@citizenfx/three';
 
+declare function GetParentResourceName(): string;
+
 class ScreenshotRequest {
     encoding: 'jpg' | 'png' | 'webp';
     quality: number;
@@ -342,3 +344,166 @@ class ScreenshotUI {
 
 const ui = new ScreenshotUI();
 ui.initialize();
+
+// Command UI
+const resourceName = GetParentResourceName ? GetParentResourceName() : 'Photon';
+
+function showCommandUI() {
+    const el = document.getElementById('command-ui');
+    if (el) {
+        el.classList.add('open');
+    }
+
+    const resultEl = document.getElementById('cmd-result');
+    if (resultEl) {
+        resultEl.style.display = 'none';
+    }
+
+    const statusEl = document.getElementById('cmd-status');
+    if (statusEl) {
+        statusEl.textContent = '';
+        statusEl.className = 'command-status';
+    }
+}
+
+function hideCommandUI() {
+    const el = document.getElementById('command-ui');
+    if (el) {
+        el.classList.remove('open');
+    }
+
+    fetch(`https://cfx-nui-${resourceName}/screenshot_command_close`, {
+        method: 'POST',
+        mode: 'cors',
+        body: '{}'
+    });
+}
+
+function submitCommand() {
+    const playerInput = document.getElementById('cmd-player') as HTMLInputElement;
+    const encodingSelect = document.getElementById('cmd-encoding') as HTMLSelectElement;
+    const qualityInput = document.getElementById('cmd-quality') as HTMLInputElement;
+    const overlayInput = document.getElementById('cmd-overlay') as HTMLInputElement;
+    const positionSelect = document.getElementById('cmd-position') as HTMLSelectElement;
+    const widthInput = document.getElementById('cmd-width') as HTMLInputElement;
+    const heightInput = document.getElementById('cmd-height') as HTMLInputElement;
+    const discordCheck = document.getElementById('cmd-discord') as HTMLInputElement;
+
+    const data: any = {
+        player: playerInput.value.trim()
+    };
+
+    if (data.player.length === 0) {
+        data.player = null;
+    }
+
+    data.encoding = encodingSelect.value;
+    data.quality = parseFloat(qualityInput.value) || 0.92;
+
+    if (overlayInput.value.trim()) {
+        data.overlay = {
+            text: overlayInput.value.trim(),
+            position: positionSelect.value,
+            color: '#ffffff',
+            fontSize: 24,
+            background: 'rgba(0,0,0,0.5)'
+        };
+    }
+
+    if (widthInput.value) {
+        data.width = parseInt(widthInput.value, 10);
+    }
+
+    if (heightInput.value) {
+        data.height = parseInt(heightInput.value, 10);
+    }
+
+    data.sendToDiscord = discordCheck.checked;
+
+    const statusEl = document.getElementById('cmd-status');
+    if (statusEl) {
+        statusEl.textContent = 'Capturing...';
+        statusEl.className = 'command-status';
+    }
+
+    const captureBtn = document.getElementById('cmd-capture') as HTMLButtonElement;
+    if (captureBtn) {
+        captureBtn.disabled = true;
+        captureBtn.textContent = 'Capturing...';
+    }
+
+    fetch(`https://cfx-nui-${resourceName}/screenshot_command`, {
+        method: 'POST',
+        mode: 'cors',
+        body: JSON.stringify(data)
+    })
+    .then(() => {});
+}
+
+function displayCommandResult(result: any) {
+    const resultEl = document.getElementById('cmd-result');
+    const statusEl = document.getElementById('cmd-status');
+    const captureBtn = document.getElementById('cmd-capture') as HTMLButtonElement;
+
+    if (captureBtn) {
+        captureBtn.disabled = false;
+        captureBtn.textContent = 'Capture';
+    }
+
+    if (!resultEl || !statusEl) {
+        return;
+    }
+
+    if (result.ok === false) {
+        statusEl.textContent = 'Error: ' + (result.error || 'unknown error');
+        statusEl.className = 'command-status error';
+        resultEl.style.display = 'none';
+        return;
+    }
+
+    statusEl.textContent = 'Screenshot captured';
+    statusEl.className = 'command-status success';
+
+    let html = '';
+
+    if (result.data && result.data.startsWith('data:')) {
+        html += '<img src="' + result.data + '" alt="screenshot" />';
+    } else if (result.data) {
+        html += '<div>Result: ' + result.data + '</div>';
+    }
+
+    resultEl.innerHTML = html;
+    resultEl.style.display = 'block';
+}
+
+// Wire up buttons
+const captureBtn = document.getElementById('cmd-capture');
+if (captureBtn) {
+    captureBtn.addEventListener('click', submitCommand);
+}
+
+const closeBtn = document.getElementById('cmd-close');
+if (closeBtn) {
+    closeBtn.addEventListener('click', hideCommandUI);
+}
+
+// Listen for enter key on player input
+const playerInput = document.getElementById('cmd-player');
+if (playerInput) {
+    playerInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            submitCommand();
+        }
+    });
+}
+
+// Listen for messages to show the command UI
+window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'showScreenshotUI') {
+        showCommandUI();
+    }
+
+    if (event.data && event.data.type === 'screenshotCommandResult') {
+        displayCommandResult(event.data.result);
+    }
+});

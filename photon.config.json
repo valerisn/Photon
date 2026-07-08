@@ -9,5 +9,8 @@
         "discordapp.com"
     ],
     "historySize": 20,
+    "commandsEnabled": true,
+    "commandsPermissionRequired": true,
+    "commandDiscordWebhook": "",
     "debug": false
 }
