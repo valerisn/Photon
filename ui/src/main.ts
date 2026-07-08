@@ -35,6 +35,20 @@ class ScreenshotRequest {
         position: string;
         background: string;
     };
+
+    transform: {
+        resize: {
+            width: number;
+            height: number;
+        };
+        watermark: {
+            text: string;
+            fontSize: number;
+            color: string;
+            position: string;
+            background: string;
+        };
+    };
 }
 
 function postResult(request: ScreenshotRequest, data: string) {
@@ -233,6 +247,21 @@ class ScreenshotUI {
         // read the screenshot
         const read = new Uint8Array(w * h * 4);
         this.renderer.readRenderTargetPixels(this.rtTexture, 0, 0, w, h, read);
+
+        // process transform pipeline
+        if (request.transform) {
+            if (request.transform.resize) {
+                if (!request.width) {
+                    request.width = request.transform.resize.width;
+                }
+                if (!request.height) {
+                    request.height = request.transform.resize.height;
+                }
+            }
+            if (request.transform.watermark && !request.overlay) {
+                request.overlay = request.transform.watermark;
+            }
+        }
 
         // target output dimensions
         const outW = request.width || w;
