@@ -51,6 +51,7 @@ Photon reads `photon.config.json` from the resource root.
 | `maxConcurrentRequestsPerPlayer` | Per-player active screenshot request limit. |
 | `saveDirectory` | Folder used when `save = true` generates a filename. |
 | `allowedWebhookHosts` | Host allowlist for Discord webhook uploads. |
+| `historySize` | Max screenshot history records per player. |
 | `debug` | Enables Photon server debug logging. |
 
 ## Client Exports
@@ -78,6 +79,10 @@ end)
 | --- | --- |
 | `encoding` | `jpg`, `png`, or `webp`. Defaults to `jpg`. |
 | `quality` | Lossy encoder quality from `0.0` to `1.0`. Defaults to `0.92`. |
+| `width` | Output image width in pixels. |
+| `height` | Output image height in pixels. |
+| `overlay` | Text overlay config for watermarking screenshots. |
+| `transform` | Structured transform object with `resize` and `watermark` fields. |
 
 Do not send large data URI screenshots through server events unless you know exactly what you are doing.
 
@@ -221,6 +226,106 @@ end)
 
 Webhook uploads are restricted by `allowedWebhookHosts` in `photon.config.json`.
 
+### requestPlayerScreenshots
+
+Requests screenshots from multiple players at once. Returns a table mapping player IDs to results.
+
+```lua
+exports['Photon']:requestPlayerScreenshots(GetPlayers(), {
+    encoding = 'jpg',
+    quality = 0.85
+}, function(results)
+    for k, v in pairs(results) do
+        if v.ok then
+            print('Player ' .. k .. ' screenshot received')
+        else
+            print('Player ' .. k .. ' failed:', v.error)
+        end
+    end
+end)
+```
+
+### getScreenshotHistory
+
+Returns recent screenshot history for a player.
+
+```lua
+exports['Photon']:getScreenshotHistory(source, function(history)
+    for _, record in ipairs(history) do
+        print(record.timestamp, record.err, record.data)
+    end
+end)
+```
+
+### clearScreenshotHistory
+
+Clears screenshot history for a player.
+
+```lua
+exports['Photon']:clearScreenshotHistory(source)
+```
+
+## Resolution Control
+
+Width and height can be set directly on any screenshot option table:
+
+```lua
+exports['Photon']:requestClientScreenshotResult(source, {
+    width = 1280,
+    height = 720,
+    encoding = 'jpg'
+}, function(result)
+    print(result.data)
+end)
+```
+
+## Overlay / Watermark
+
+Text overlays are supported on all screenshot requests. Use the `overlay` option:
+
+```lua
+exports['Photon']:requestClientScreenshotResult(source, {
+    encoding = 'jpg',
+    overlay = {
+        text = 'SERVER NAME\nPlayer: ' .. GetPlayerName(source),
+        fontSize = 28,
+        color = '#ffffff',
+        position = 'bottom-left',
+        background = 'rgba(0,0,0,0.5)'
+    }
+}, function(result)
+    print(result.data)
+end)
+```
+
+Positions: `top-left`, `top-right`, `bottom-left` (default), `bottom-right`, `center`.
+
+## Transform Pipeline
+
+The `transform` option provides a structured way to apply image transformations:
+
+```lua
+exports['Photon']:requestClientScreenshotResult(source, {
+    transform = {
+        resize = {
+            width = 1280,
+            height = 720
+        },
+        watermark = {
+            text = 'SERVER NAME',
+            fontSize = 24,
+            color = '#ffffff',
+            position = 'bottom-right',
+            background = 'rgba(0,0,0,0.5)'
+        }
+    }
+}, function(result)
+    print(result.data)
+end)
+```
+
+When `transform.resize` is set, it overrides top-level `width`/`height`. When `transform.watermark` is set, it's equivalent to setting `overlay`.
+
 ## Server Options
 
 | Option | Description |
@@ -229,6 +334,10 @@ Webhook uploads are restricted by `allowedWebhookHosts` in `photon.config.json`.
 | `save` | When `true`, save using an auto-generated path in `saveDirectory`. |
 | `encoding` | `jpg`, `png`, or `webp`. Defaults to config. |
 | `quality` | Lossy encoder quality from `0.0` to `1.0`. Defaults to config. |
+| `width` | Output image width in pixels. |
+| `height` | Output image height in pixels. |
+| `overlay` | Text overlay config for watermarking screenshots. |
+| `transform` | Structured transform object with `resize` and `watermark` fields. |
 | `metadata` | Server-side metadata copied into result-style callbacks. |
 
 ## Notes

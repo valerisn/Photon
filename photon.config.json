@@ -8,5 +8,6 @@
         "discord.com",
         "discordapp.com"
     ],
+    "historySize": 20,
     "debug": false
 }
