@@ -24,6 +24,9 @@ class ScreenshotRequest {
 
     targetURL: string;
     targetField: string;
+
+    width: number;
+    height: number;
 }
 
 function postResult(request: ScreenshotRequest, data: string) {
@@ -165,21 +168,34 @@ class ScreenshotUI {
     }
 
     handleRequest(request: ScreenshotRequest) {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+
         // read the screenshot
-        const read = new Uint8Array(window.innerWidth * window.innerHeight * 4);
-        this.renderer.readRenderTargetPixels(this.rtTexture, 0, 0, window.innerWidth, window.innerHeight, read);
+        const read = new Uint8Array(w * h * 4);
+        this.renderer.readRenderTargetPixels(this.rtTexture, 0, 0, w, h, read);
+
+        // target output dimensions
+        const outW = request.width || w;
+        const outH = request.height || h;
 
         // create a temporary canvas to compress the image
         const canvas = document.createElement('canvas');
         canvas.style.display = 'inline';
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        canvas.width = outW;
+        canvas.height = outH;
 
-        // draw the image on the canvas
+        // draw the image on the canvas, scaling if resolution differs
         const d = new Uint8ClampedArray(read.buffer);
 
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.putImageData(new ImageData(d, w, h), 0, 0);
+
         const cxt = canvas.getContext('2d');
-        cxt.putImageData(new ImageData(d, window.innerWidth, window.innerHeight), 0, 0);
+        cxt.drawImage(tempCanvas, 0, 0, w, h, 0, 0, outW, outH);
 
         // encode the image
         let type = 'image/png';
